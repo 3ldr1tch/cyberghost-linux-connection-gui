@@ -1,0 +1,119 @@
+# Python
+
+**pycache**/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+
+.venv/
+venv/
+env/
+ENV/
+
+# Local application/cache/state
+
+.cache/
+cache/
+*.log
+*.tmp
+*.temp
+*.pid
+
+# Local configuration / environment
+
+.env
+.env.*
+!.env.example
+*.local
+config.local.*
+config.json
+*.local.json
+*.local.toml
+*.local.yaml
+*.local.yml
+
+# Credentials / authentication / secrets
+
+credentials/
+credentials*
+auth/
+auth*
+token*
+jwt*
+secret*
+secrets*
+*.secret
+
+# Private key and certificate material
+
+*.key
+*.pem
+*.p12
+*.pfx
+*.pkcs12
+client.crt
+client.key
+ca.crt
+
+# VPN configuration and private connection material
+
+*.ovpn
+*.nmconnection
+wg*.conf
+wireguard*.conf
+
+# CyberGhost local/authentication state
+
+.cyberghost/
+cg-test-home/
+cyberghost-state/
+
+# CyberGhost client downloads / extracted proprietary files
+
+cyberghost-config/
+cg-inspect/
+cyberghostvpn-*/
+cyberghostvpn*/
+cyberghostvpn*.zip
+cyberghostvpn*.tar*
+cyberghost/
+cyberghost_extracted/
+*_extracted/
+openvpn/
+
+# Working copies / local backups
+
+*.working
+*.bak
+*.backup
+*.orig
+*.pre-publication
+*~
+*.swp
+*.swo
+
+# Editors / IDEs
+
+.idea/
+.vscode/
+*.code-workspace
+
+# OS / desktop junk
+
+.DS_Store
+Thumbs.db
+.directory
+
+# Build / packaging
+
+build/
+dist/
+*.egg-info/
+*.egg
