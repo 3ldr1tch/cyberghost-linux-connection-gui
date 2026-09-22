@@ -28,112 +28,6 @@ NM_PROFILE = os.environ.get("CG_SWITCHER_NM_PROFILE", "CyberGhost - Dynamic")
 CG_BINARY_ENV = "CYBERGHOST_BIN"
 LOW_LOAD_POOL = 5
 
-# CyberGhost regular VPN country catalog.
-# Limited to countries currently listed in CyberGhost's public server directory.
-# Availability is still checked live through the official Linux client.
-CYBERGHOST_COUNTRIES = [
-    ("AL", "Albania"),
-    ("AD", "Andorra"),
-    ("AT", "Austria"),
-    ("BY", "Belarus"),
-    ("BE", "Belgium"),
-    ("BA", "Bosnia and Herzegovina"),
-    ("BG", "Bulgaria"),
-    ("HR", "Croatia"),
-    ("CY", "Cyprus"),
-    ("CZ", "Czechia"),
-    ("DK", "Denmark"),
-    ("EE", "Estonia"),
-    ("FI", "Finland"),
-    ("FR", "France"),
-    ("DE", "Germany"),
-    ("GR", "Greece"),
-    ("HU", "Hungary"),
-    ("IS", "Iceland"),
-    ("IE", "Ireland"),
-    ("IM", "Isle of Man"),
-    ("IT", "Italy"),
-    ("LV", "Latvia"),
-    ("LI", "Liechtenstein"),
-    ("LT", "Lithuania"),
-    ("LU", "Luxembourg"),
-    ("MT", "Malta"),
-    ("MD", "Moldova"),
-    ("MC", "Monaco"),
-    ("ME", "Montenegro"),
-    ("NL", "Netherlands"),
-    ("MK", "North Macedonia"),
-    ("NO", "Norway"),
-    ("PL", "Poland"),
-    ("PT", "Portugal"),
-    ("RO", "Romania"),
-    ("RU", "Russia"),
-    ("RS", "Serbia"),
-    ("SK", "Slovakia"),
-    ("SI", "Slovenia"),
-    ("ES", "Spain"),
-    ("SE", "Sweden"),
-    ("CH", "Switzerland"),
-    ("TR", "Türkiye"),
-    ("UA", "Ukraine"),
-    ("GB", "United Kingdom"),
-    ("AR", "Argentina"),
-    ("BS", "Bahamas"),
-    ("BO", "Bolivia"),
-    ("BR", "Brazil"),
-    ("CA", "Canada"),
-    ("CL", "Chile"),
-    ("CO", "Colombia"),
-    ("CR", "Costa Rica"),
-    ("DO", "Dominican Republic"),
-    ("EC", "Ecuador"),
-    ("GL", "Greenland"),
-    ("GT", "Guatemala"),
-    ("MX", "Mexico"),
-    ("PA", "Panama"),
-    ("PE", "Peru"),
-    ("US", "United States"),
-    ("UY", "Uruguay"),
-    ("VE", "Venezuela"),
-    ("AU", "Australia"),
-    ("BD", "Bangladesh"),
-    ("KH", "Cambodia"),
-    ("CN", "China"),
-    ("HK", "Hong Kong"),
-    ("IN", "India"),
-    ("ID", "Indonesia"),
-    ("IR", "Iran"),
-    ("JP", "Japan"),
-    ("KZ", "Kazakhstan"),
-    ("LA", "Laos"),
-    ("MO", "Macao"),
-    ("MY", "Malaysia"),
-    ("MN", "Mongolia"),
-    ("MM", "Myanmar"),
-    ("NP", "Nepal"),
-    ("NZ", "New Zealand"),
-    ("PK", "Pakistan"),
-    ("PH", "Philippines"),
-    ("SG", "Singapore"),
-    ("KR", "South Korea"),
-    ("LK", "Sri Lanka"),
-    ("TW", "Taiwan"),
-    ("TH", "Thailand"),
-    ("VN", "Vietnam"),
-    ("DZ", "Algeria"),
-    ("AM", "Armenia"),
-    ("EG", "Egypt"),
-    ("GE", "Georgia"),
-    ("IL", "Israel"),
-    ("KE", "Kenya"),
-    ("MA", "Morocco"),
-    ("NG", "Nigeria"),
-    ("QA", "Qatar"),
-    ("SA", "Saudi Arabia"),
-    ("ZA", "South Africa"),
-    ("AE", "United Arab Emirates"),
-]
-
 def run(args: list[str], timeout: int = 60) -> subprocess.CompletedProcess:
     return subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           text=True, timeout=timeout)
@@ -187,6 +81,20 @@ class Directory:
             detail = "\n".join(x for x in (cp.stdout.strip(), cp.stderr.strip()) if x)
             raise RuntimeError(detail or "CyberGhost directory request failed.")
         return cp.stdout
+
+    def countries(self) -> list[dict[str, str]]:
+        result = []
+        for row in parse_rows(self.call("--traffic", "--country-code")):
+            if len(row) < 3:
+                continue
+            name = row[1].strip()
+            code = row[2].strip().upper()
+            if name and re.fullmatch(r"[A-Z]{2}", code):
+                result.append({"code": code.lower(), "name": name})
+        result.sort(key=lambda x: x["name"].casefold())
+        if not result:
+            raise RuntimeError("No usable countries were returned by CyberGhost.")
+        return result
 
     def cities(self, code: str) -> list[dict[str, Any]]:
         result = []
@@ -362,8 +270,14 @@ def main() -> int:
     directory = Directory(binary, runtime_home)
 
     try:
-        countries = [(f"{name} ({code})", (code.lower(), name))
-                     for code, name in sorted(CYBERGHOST_COUNTRIES, key=lambda x: x[1])]
+        live_countries = directory.countries()
+        countries = [
+            (
+                f"{item['name']} ({item['code'].upper()})",
+                (item["code"], item["name"]),
+            )
+            for item in live_countries
+        ]
         code, country = choose("Country", countries)
 
         print(f"\nChecking current CyberGhost locations for {country}...")

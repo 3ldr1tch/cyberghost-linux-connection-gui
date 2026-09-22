@@ -53,117 +53,6 @@ CACHE_DIR = Path.home() / ".cache" / "cg-switcher"
 COUNTRY_CACHE_FILE = CACHE_DIR / "confirmed-countries.json"
 
 
-# ============================================================
-# CyberGhost regular VPN country catalog
-#
-# Limited to countries currently listed on CyberGhost's
-# public regular VPN server directory. City/server availability
-# is still validated live through the official Linux client.
-# ============================================================
-
-CYBERGHOST_COUNTRIES = [
-    ("AL", "Albania"),
-    ("AD", "Andorra"),
-    ("AT", "Austria"),
-    ("BY", "Belarus"),
-    ("BE", "Belgium"),
-    ("BA", "Bosnia and Herzegovina"),
-    ("BG", "Bulgaria"),
-    ("HR", "Croatia"),
-    ("CY", "Cyprus"),
-    ("CZ", "Czechia"),
-    ("DK", "Denmark"),
-    ("EE", "Estonia"),
-    ("FI", "Finland"),
-    ("FR", "France"),
-    ("DE", "Germany"),
-    ("GR", "Greece"),
-    ("HU", "Hungary"),
-    ("IS", "Iceland"),
-    ("IE", "Ireland"),
-    ("IM", "Isle of Man"),
-    ("IT", "Italy"),
-    ("LV", "Latvia"),
-    ("LI", "Liechtenstein"),
-    ("LT", "Lithuania"),
-    ("LU", "Luxembourg"),
-    ("MT", "Malta"),
-    ("MD", "Moldova"),
-    ("MC", "Monaco"),
-    ("ME", "Montenegro"),
-    ("NL", "Netherlands"),
-    ("MK", "North Macedonia"),
-    ("NO", "Norway"),
-    ("PL", "Poland"),
-    ("PT", "Portugal"),
-    ("RO", "Romania"),
-    ("RU", "Russia"),
-    ("RS", "Serbia"),
-    ("SK", "Slovakia"),
-    ("SI", "Slovenia"),
-    ("ES", "Spain"),
-    ("SE", "Sweden"),
-    ("CH", "Switzerland"),
-    ("TR", "Türkiye"),
-    ("UA", "Ukraine"),
-    ("GB", "United Kingdom"),
-    ("AR", "Argentina"),
-    ("BS", "Bahamas"),
-    ("BO", "Bolivia"),
-    ("BR", "Brazil"),
-    ("CA", "Canada"),
-    ("CL", "Chile"),
-    ("CO", "Colombia"),
-    ("CR", "Costa Rica"),
-    ("DO", "Dominican Republic"),
-    ("EC", "Ecuador"),
-    ("GL", "Greenland"),
-    ("GT", "Guatemala"),
-    ("MX", "Mexico"),
-    ("PA", "Panama"),
-    ("PE", "Peru"),
-    ("US", "United States"),
-    ("UY", "Uruguay"),
-    ("VE", "Venezuela"),
-    ("AU", "Australia"),
-    ("BD", "Bangladesh"),
-    ("KH", "Cambodia"),
-    ("CN", "China"),
-    ("HK", "Hong Kong"),
-    ("IN", "India"),
-    ("ID", "Indonesia"),
-    ("IR", "Iran"),
-    ("JP", "Japan"),
-    ("KZ", "Kazakhstan"),
-    ("LA", "Laos"),
-    ("MO", "Macao"),
-    ("MY", "Malaysia"),
-    ("MN", "Mongolia"),
-    ("MM", "Myanmar"),
-    ("NP", "Nepal"),
-    ("NZ", "New Zealand"),
-    ("PK", "Pakistan"),
-    ("PH", "Philippines"),
-    ("SG", "Singapore"),
-    ("KR", "South Korea"),
-    ("LK", "Sri Lanka"),
-    ("TW", "Taiwan"),
-    ("TH", "Thailand"),
-    ("VN", "Vietnam"),
-    ("DZ", "Algeria"),
-    ("AM", "Armenia"),
-    ("EG", "Egypt"),
-    ("GE", "Georgia"),
-    ("IL", "Israel"),
-    ("KE", "Kenya"),
-    ("MA", "Morocco"),
-    ("NG", "Nigeria"),
-    ("QA", "Qatar"),
-    ("SA", "Saudi Arabia"),
-    ("ZA", "South Africa"),
-    ("AE", "United Arab Emirates"),
-]
-
 
 # ============================================================
 # Generic helpers
@@ -409,6 +298,51 @@ class CyberGhostDirectory:
             ],
             timeout=timeout,
         )
+
+    def get_countries(self) -> list[dict[str, str]]:
+        result = self._command(
+            "--traffic",
+            "--country-code",
+        )
+
+        if result.returncode != 0:
+            combined = "\n".join(
+                value
+                for value in (
+                    result.stdout.strip(),
+                    result.stderr.strip(),
+                )
+                if value
+            )
+            raise RuntimeError(
+                combined
+                or "CyberGhost could not retrieve the country list."
+            )
+
+        countries: list[dict[str, str]] = []
+
+        for row in parse_table_rows(result.stdout):
+            if len(row) < 3:
+                continue
+
+            name = row[1].strip()
+            code = row[2].strip().upper()
+
+            if name and re.fullmatch(r"[A-Z]{2}", code):
+                countries.append({
+                    "code": code.lower(),
+                    "name": name,
+                })
+
+        countries.sort(key=lambda item: item["name"].casefold())
+
+        if not countries:
+            raise RuntimeError(
+                "CyberGhost returned successfully, but no valid "
+                "country rows were found."
+            )
+
+        return countries
 
     def get_cities(
         self,
@@ -1074,9 +1008,10 @@ class MainWindow(QMainWindow):
         self.worker: Worker | None = None
 
         self._build_ui()
-        self._populate_countries()
+        self._populate_countries_placeholder()
         self._startup_diagnostics()
         self._refresh_connection_info()
+        self._load_countries()
 
     # --------------------------------------------------------
     # UI
@@ -1364,11 +1299,47 @@ class MainWindow(QMainWindow):
     # Countries
     # --------------------------------------------------------
 
-    def _populate_countries(self) -> None:
+    def _populate_countries_placeholder(self) -> None:
         self.country_combo.blockSignals(True)
-
         self.country_combo.clear()
+        self.country_combo.addItem(
+            "Loading CyberGhost countries…",
+            None,
+        )
+        self.country_combo.setEnabled(False)
+        self.country_combo.blockSignals(False)
 
+    def _load_countries(self) -> None:
+        if not self.directory:
+            self.country_combo.blockSignals(True)
+            self.country_combo.clear()
+            self.country_combo.addItem(
+                "CyberGhost client unavailable",
+                None,
+            )
+            self.country_combo.setEnabled(False)
+            self.country_combo.blockSignals(False)
+            return
+
+        self._set_busy(
+            True,
+            "Loading CyberGhost countries…",
+        )
+
+        self._start_worker(
+            self.directory.get_countries,
+            self._countries_loaded,
+            self._countries_failed,
+        )
+
+    def _countries_loaded(
+        self,
+        countries: list[dict[str, str]],
+    ) -> None:
+        self._set_busy(False)
+
+        self.country_combo.blockSignals(True)
+        self.country_combo.clear()
         self.country_combo.addItem(
             "Select a country…",
             None,
@@ -1380,10 +1351,9 @@ class MainWindow(QMainWindow):
             .keys()
         )
 
-        for code, name in sorted(
-            CYBERGHOST_COUNTRIES,
-            key=lambda item: item[1],
-        ):
+        for country in countries:
+            code = country["code"].upper()
+            name = country["name"]
             display = f"{name} ({code})"
 
             if code in confirmed_codes:
@@ -1392,12 +1362,55 @@ class MainWindow(QMainWindow):
             self.country_combo.addItem(
                 display,
                 {
-                    "code": code.lower(),
+                    "code": country["code"],
                     "name": name,
                 },
             )
 
+        self.country_combo.setEnabled(True)
         self.country_combo.blockSignals(False)
+
+        self.country_state_label.setText(
+            f"Loaded {len(countries)} countries directly "
+            "from CyberGhost."
+        )
+
+        self.status_value.setText(
+            "Country list loaded"
+        )
+
+    def _countries_failed(
+        self,
+        message: str,
+    ) -> None:
+        self._set_busy(False)
+
+        self.country_combo.blockSignals(True)
+        self.country_combo.clear()
+        self.country_combo.addItem(
+            "Country list unavailable",
+            None,
+        )
+        self.country_combo.setEnabled(False)
+        self.country_combo.blockSignals(False)
+
+        self.country_state_label.setText(
+            "CyberGhost's current country list could not be loaded."
+        )
+
+        self.status_value.setText(
+            "Country list unavailable"
+        )
+
+        QMessageBox.warning(
+            self,
+            "Country list unavailable",
+            (
+                "CyberGhost could not provide its current "
+                "country list.\n\n"
+                f"{message}"
+            ),
+        )
 
     def _country_changed(self) -> None:
         data = self.country_combo.currentData()
