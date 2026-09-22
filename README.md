@@ -153,6 +153,8 @@ CyberGhost Linux Switcher deliberately separates server discovery from VPN trans
 
 The official CyberGhost Linux executable is invoked to obtain live location/server information. The switcher parses its country/city/server tables.
 
+Directory queries run unprivileged as the current user. The switcher supplies its temporary runtime `HOME` to the official client but does not use `sudo` for country, city, or server discovery.
+
 The application does not reimplement CyberGhost account authentication or directly maintain CyberGhost account tokens.
 
 ### VPN transport
@@ -208,7 +210,7 @@ The switcher follows several intentional boundaries:
 - Reported server loads outside `0–100` are rejected.
 - The application changes only the NetworkManager `remote` dictionary entry and verifies that other VPN-data keys were not changed.
 
-The application invokes the official CyberGhost executable with `sudo`. Review the source before running software with elevated operations.
+CyberGhost location/server discovery runs as the current user and does not invoke the official CyberGhost executable with `sudo`. NetworkManager remains responsible for VPN activation and for any authorization required by the system's NetworkManager/Polkit configuration.
 
 ## Country availability
 
